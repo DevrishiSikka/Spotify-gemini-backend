@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import json
+import re
 import ast
 from mistralai import Mistral
 
@@ -24,27 +25,28 @@ def generate_playlist():
     user_mood = data.get("mood", "")
 
     master_prompt = f"""
-        You are a music recommendation assistant. Based on the user's mood or input, generate a playlist of 10 songs.
-        Each song should include:
-        - title: name of the song
-        - artist: artist or group name
-        - album: the album it belongs to
-        - duration: estimated song length (e.g., "4:22")
-        - days: how long ago it was added (e.g., "2 days ago", "1 week ago")
-        
-        Return the data strictly in the following JSON format and dont give any other text except the json in the below format:
-        [
-        {{
-            "title": "Song Title",
-            "artist": "Artist Name",
-            "album": "Album Name",
-            "duration": "Song Duration",
-            "days": "Days the song was added"
-        }}
-        ]
+You are a music recommendation assistant. Based on the user's mood or input, generate a playlist of 10 songs.
+Each song should include:
+- title: name of the song
+- artist: artist or group name
+- album: the album it belongs to
+- duration: estimated song length (e.g., "4:22")
+- days: how long ago it was added (e.g., "2 days ago", "1 week ago")
 
-        User mood: {user_mood}
-        """
+Return only a JSON array with no additional text, formatting, or explanation. The response should be valid JSON that can be parsed directly.
+Format:
+[
+  {{
+    "title": "Song Title",
+    "artist": "Artist Name",
+    "album": "Album Name",
+    "duration": "Song Duration",
+    "days": "Days the song was added"
+  }}
+]
+
+User mood: {user_mood}
+"""
 
     try:
         # Initialize Mistral client
@@ -63,18 +65,35 @@ def generate_playlist():
             # Get the response content
             raw_text = response.choices[0].message.content.strip()
 
-            # Clean markdown fencing if present
-            if raw_text.startswith("```json") or raw_text.startswith("```"):
-                raw_text = raw_text.strip("`").split("json")[-1].strip()
+            # Extract JSON from the response
+            # First, look for JSON between code blocks
+            import re
+            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', raw_text)
+            
+            if json_match:
+                # If JSON is wrapped in code blocks, extract it
+                json_str = json_match.group(1).strip()
+            else:
+                # Otherwise use the whole text and try to find JSON
+                json_str = raw_text
+                
+                # Try to find array or object in the text
+                array_match = re.search(r'\[\s*\{.*\}\s*\]', json_str, re.DOTALL)
+                if array_match:
+                    json_str = array_match.group(0)
+                else:
+                    object_match = re.search(r'\{\s*".*"\s*:.*\}', json_str, re.DOTALL)
+                    if object_match:
+                        json_str = object_match.group(0)
 
             # Try parsing with json
             try:
-                playlist_json = json.loads(raw_text)
+                playlist_json = json.loads(json_str)
                 return _corsify_actual_response(jsonify(playlist_json))
             except json.JSONDecodeError:
                 # Fallback: try literal_eval for semi-valid Python lists
                 try:
-                    playlist_json = ast.literal_eval(raw_text)
+                    playlist_json = ast.literal_eval(json_str)
                     return _corsify_actual_response(jsonify(playlist_json))
                 except Exception:
                     return _corsify_actual_response(jsonify({
