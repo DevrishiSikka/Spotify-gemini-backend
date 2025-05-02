@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import requests
-import os
+import json
 
 app = Flask(__name__)
 CORS(app)
@@ -9,7 +9,7 @@ CORS(app)
 GEMINI_API_KEY = "AIzaSyBU2NkGo5f4n7BGhcg3tlWrd3s-uyJWPUc"
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
-# Global CORS Headers
+# CORS headers
 @app.after_request
 def add_cors_headers(response):
     response.headers['Access-Control-Allow-Origin'] = 'https://silver-fortnight-q6v7grr5r76h6r5-3000.app.github.dev'
@@ -66,7 +66,19 @@ def generate_playlist():
             json=payload
         )
         response.raise_for_status()
-        return _corsify_actual_response(jsonify(response.json()))
+        gemini_data = response.json()
+
+        # Extract and parse Gemini's text response
+        raw_text = gemini_data.get("candidates", [])[0].get("content", {}).get("parts", [])[0].get("text", "")
+        try:
+            playlist_json = json.loads(raw_text)
+            return _corsify_actual_response(jsonify(playlist_json))
+        except json.JSONDecodeError:
+            return _corsify_actual_response(jsonify({
+                "error": "Invalid JSON response from model",
+                "raw_output": raw_text
+            })), 500
+
     except requests.exceptions.RequestException as e:
         return _corsify_actual_response(jsonify({"error": str(e)})), 500
 
