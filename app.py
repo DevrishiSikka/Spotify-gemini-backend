@@ -9,7 +9,7 @@ CORS(app)
 # Replace with your actual AIML API key
 client = OpenAI(
     base_url="https://api.aimlapi.com/v1",
-    api_key="<YOUR_AIMLAPI_KEY>",
+    api_key="a84731691b2042dcaf203671ac44126e",
 )
 
 @app.after_request
