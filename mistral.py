@@ -24,27 +24,27 @@ def generate_playlist():
     user_mood = data.get("mood", "")
 
     master_prompt = f"""
-You are a music recommendation assistant. Based on the user's mood or input, generate a playlist of 10 songs.
-Each song should include:
-- title: name of the song
-- artist: artist or group name
-- album: the album it belongs to
-- duration: estimated song length (e.g., "4:22")
-- days: how long ago it was added (e.g., "2 days ago", "1 week ago")
+        You are a music recommendation assistant. Based on the user's mood or input, generate a playlist of 10 songs.
+        Each song should include:
+        - title: name of the song
+        - artist: artist or group name
+        - album: the album it belongs to
+        - duration: estimated song length (e.g., "4:22")
+        - days: how long ago it was added (e.g., "2 days ago", "1 week ago")
+        
+        Return the data strictly in the following JSON format and dont give any other text except the json in the below format:
+        [
+        {{
+            "title": "Song Title",
+            "artist": "Artist Name",
+            "album": "Album Name",
+            "duration": "Song Duration",
+            "days": "Days the song was added"
+        }}
+        ]
 
-Return the data strictly in the following JSON format:
-[
-  {{
-    "title": "Song Title",
-    "artist": "Artist Name",
-    "album": "Album Name",
-    "duration": "Song Duration",
-    "days": "Days the song was added"
-  }}
-]
-
-User mood: {user_mood}
-"""
+        User mood: {user_mood}
+        """
 
     try:
         # Initialize Mistral client
