@@ -25,7 +25,7 @@ def generate_playlist():
     user_mood = data.get("mood", "")
 
     master_prompt = f"""
-You are a music recommendation assistant. Based on the user's mood or input, generate a playlist of 20 songs.
+You are a music recommendation assistant. Based on the user's mood or input, generate a playlist of 20 songs and make sure all songs arae real and unique.
 Each song should include:
 - title: name of the song
 - artist: artist or group name
