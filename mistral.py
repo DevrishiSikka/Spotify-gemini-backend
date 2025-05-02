@@ -148,12 +148,13 @@ def generate_playlist():
     user_mood = data.get("mood", "")
 
     master_prompt = f"""
-You are a music recommendation assistant. Based on the user's mood or input, generate a playlist of 10 songs.
+You are a music recommendation assistant. Based on the user's mood or input, generate a playlist of EXACTLY 10 DIFFERENT songs.
 
 CRITICAL REQUIREMENTS:
 1. ONLY recommend REAL songs that actually exist - check your knowledge carefully
-2. Each song MUST be UNIQUE - no duplicates in the playlist
+2. Each song MUST be COMPLETELY UNIQUE - no duplicates in artist or title combinations in the playlist
 3. Verify each song is by the correct artist before including it
+4. DO NOT REPEAT the same artist more than twice in the playlist
 
 Each song should include:
 - title: name of the song
@@ -174,10 +175,12 @@ Format:
   }}
 ]
 
-Before finalizing your response, check each song to confirm:
-1. This is a real song by this artist
+Before finalizing your response, triple-check each song to confirm:
+1. This is a real song by this artist - do not include made-up songs
 2. This song has not been included previously in this playlist
 3. The album name is correct for this song
+4. You have included exactly 10 different songs
+5. No artist appears more than twice in the playlist
 
 User mood: {user_mood}
 """
@@ -187,15 +190,16 @@ User mood: {user_mood}
         with Mistral(api_key="AYVGzIu6L5X6bxHVGbjBmprpr3IzqLmV") as mistral_client:
             # Call Mistral AI API
             response = mistral_client.chat.complete(
-                model="mistral-small-latest",  # You can also use "mistral-medium-latest" or "mistral-large-latest"
+                model="mistral-medium-latest",  # Using medium model for better knowledge of real songs
                 messages=[
                     {
                         "content": master_prompt,
                         "role": "user",
                     },
                 ],
-                temperature=0.7,  # Lower temperature for more factual responses
-                max_tokens=2048   # Ensure enough tokens for a complete response
+                temperature=0.8,  # Balanced temperature for factual responses with variety
+                max_tokens=2048,  # Ensure enough tokens for a complete response
+                top_p=0.9         # Slightly constrained sampling for higher quality
             )
 
             # Get the response content
@@ -240,14 +244,48 @@ User mood: {user_mood}
                             seen_songs.add(song_id)
                             unique_playlist.append(song)
                     
-                    # If duplicates were removed, check if we need to request more songs
-                    if len(unique_playlist) < 10 and len(unique_playlist) < len(playlist_json):
-                        # For simplicity, we'll just return what we have with a warning
-                        return _corsify_actual_response(jsonify({
-                            "warning": f"Removed {len(playlist_json) - len(unique_playlist)} duplicate songs",
-                            "playlist": unique_playlist
-                        }))
+                    # If we've removed duplicates but still have fewer than 10 songs,
+                    # we'll try with a different model or higher temperature if unique_playlist is too small
+                    if len(unique_playlist) < 5 and len(unique_playlist) < len(playlist_json):
+                        # Try again with the medium model and higher temperature
+                        retry_response = mistral_client.chat.complete(
+                            model="mistral-medium-latest",  # Upgrade to a more capable model
+                            messages=[
+                                {
+                                    "content": master_prompt + "\n\nIMPORTANT: Ensure ALL 10 songs are DIFFERENT. Do not repeat any songs!",
+                                    "role": "user",
+                                },
+                            ],
+                            temperature=0.9,  # Higher temperature for more variety
+                            max_tokens=2048
+                        )
+                        
+                        retry_text = retry_response.choices[0].message.content.strip()
+                        
+                        # Process the retry response
+                        json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', retry_text)
+                        if json_match:
+                            retry_json_str = json_match.group(1).strip()
+                        else:
+                            retry_json_str = retry_text
+                            array_match = re.search(r'\[\s*\{.*\}\s*\]', retry_json_str, re.DOTALL)
+                            if array_match:
+                                retry_json_str = array_match.group(0)
+                        
+                        try:
+                            retry_playlist = json.loads(retry_json_str)
+                            if isinstance(retry_playlist, list):
+                                # Check for duplicates again
+                                for song in retry_playlist:
+                                    song_id = f"{song.get('title', '').lower()}|{song.get('artist', '').lower()}"
+                                    if song_id not in seen_songs:
+                                        seen_songs.add(song_id)
+                                        unique_playlist.append(song)
+                        except:
+                            # If retry fails, we'll continue with what we have
+                            pass
                     
+                    # Always return the raw playlist without any wrapper or warnings
                     return _corsify_actual_response(jsonify(unique_playlist))
                 
                 return _corsify_actual_response(jsonify(playlist_json))
