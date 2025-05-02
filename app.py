@@ -5,7 +5,7 @@ import ast
 from openai import OpenAI
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins="*")
 
 client = OpenAI(
     base_url="https://api.aimlapi.com/v1",
