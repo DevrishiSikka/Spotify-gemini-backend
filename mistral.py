@@ -264,6 +264,46 @@ from mistralai import Mistral
 app = Flask(__name__)
 CORS(app, origins="*")
 
+
+song_titles = [
+    "Blinding Lights", "Levitating", "Shape of You", "Bad Guy", "Stay", "Uptown Funk", "Rolling in the Deep",
+    "Billie Jean", "Thinking Out Loud", "Take On Me", "Happier Than Ever", "Peaches", "As It Was",
+    "Anti-Hero", "Drivers License", "Radioactive", "Counting Stars", "Sunflower", "Watermelon Sugar",
+    "Industry Baby", "Save Your Tears", "Senorita", "Believer", "Memories", "Perfect", "Positions",
+    "Shivers", "Good 4 U", "Lovely", "Goosebumps", "Rockstar", "Lose Yourself", "Numb", "Starboy",
+    "Circles", "Lucid Dreams", "See You Again", "WAP", "Laugh Now Cry Later", "Don't Start Now"
+]
+
+artist_names = [
+    "The Weeknd", "Dua Lipa", "Ed Sheeran", "Billie Eilish", "Justin Bieber", "Bruno Mars", "Adele",
+    "Michael Jackson", "a-ha", "Olivia Rodrigo", "Taylor Swift", "Harry Styles", "Drake", "Post Malone",
+    "Imagine Dragons", "Eminem", "Linkin Park", "SZA", "Doja Cat", "Travis Scott", "Khalid", "Juice WRLD",
+    "Katy Perry", "OneRepublic", "Maroon 5", "Ariana Grande", "Camila Cabello", "Bad Bunny", "Lizzo",
+    "Shawn Mendes", "21 Savage", "Nicki Minaj", "Lady Gaga"
+]
+
+album_names = [
+    "After Hours", "Future Nostalgia", "÷ (Divide)", "Happier Than Ever", "Justice", "Thriller",
+    "Midnights", "Hollywood's Bleeding", "Scorpion", "25", "Positions", "Starboy", "Fine Line",
+    "When We All Fall Asleep, Where Do We Go?", "x", "The Eminem Show", "Lover", "Goodbye & Good Riddance"
+]
+
+
+def generate_random_duration():
+    minutes = random.randint(2, 5)
+    seconds = random.randint(0, 59)
+    return f"{minutes}:{seconds:02d}"
+
+def generate_random_song():
+    return {
+        "title": random.choice(song_titles),
+        "artist": random.choice(artist_names),
+        "album": random.choice(album_names),
+        "duration": generate_random_duration(),
+        "days": f"{random.randint(1, 7)} days ago"
+    }
+
+
 # Global CORS Headers
 @app.after_request
 def add_cors_headers(response):
@@ -413,18 +453,18 @@ User mood: {user_mood}
 
 @app.route("/songs", methods=["GET"])
 def get_random_songs():
-    songs = []
-    for i in range(1, 101):  # Create 100 sample songs
-        songs.append({
-            "title": f"Song {i}",
-            "artist": f"Artist {((i - 1) % 20) + 1}",
-            "album": f"Album {((i - 1) % 15) + 1}",
-            "duration": f"{random.randint(2, 5)}:{random.randint(0, 59):02}",
-            "days": f"{random.randint(1, 10)} days ago"
-        })
+    num_songs = 50
+    generated = []
+    used_titles = set()
 
-    random.shuffle(songs)
-    return jsonify(songs[:50])  # Return 50 random songs
+    while len(generated) < num_songs:
+        song = generate_random_song()
+        key = (song["title"], song["artist"])  # avoid exact duplicates
+        if key not in used_titles:
+            generated.append(song)
+            used_titles.add(key)
+
+    return jsonify(generated)
 
 def _build_cors_preflight_response():
     response = make_response()
