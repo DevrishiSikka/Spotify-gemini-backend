@@ -181,6 +181,63 @@
 #     except Exception as e:
 #         return _corsify_actual_response(jsonify({"error": str(e)})), 500
 
+# @app.route("/api/generate-name", methods=["POST", "OPTIONS"])
+# def generate_playlist_name():
+#     if request.method == "OPTIONS":
+#         return _build_cors_preflight_response()
+
+#     data = request.get_json()
+#     user_prompt = data.get("prompt", "")
+
+#     name_prompt = f"""
+# Generate a catchy, memorable playlist name based on this user input: "{user_prompt}"
+
+# REQUIREMENTS:
+# 1. The name must be AT MOST 4 words (fewer words is better)
+# 2. The name should capture the essence or mood of the user's prompt
+# 3. Be creative, evocative, and original
+# 4. Don't use generic phrases like "Music for..." or "Songs for..."
+
+# Return ONLY the playlist name as plain text with no quotes, explanations, or additional formatting.
+# """
+
+#     try:
+#         # Initialize Mistral client
+#         with Mistral(api_key="AYVGzIu6L5X6bxHVGbjBmprpr3IzqLmV") as mistral_client:
+#             # Call Mistral AI API
+#             response = mistral_client.chat.complete(
+#                 model="mistral-small-latest",  # Small model is sufficient for naming
+#                 messages=[
+#                     {
+#                         "content": name_prompt,
+#                         "role": "user",
+#                     },
+#                 ],
+#                 temperature=0.9,  # Higher temperature for creativity
+#                 max_tokens=20,    # Short response
+#                 top_p=0.95        # Allow for creative sampling
+#             )
+
+#             # Get the response content
+#             raw_text = response.choices[0].message.content.strip()
+            
+#             # Process the response to ensure it's at most 4 words
+#             words = raw_text.split()
+#             if len(words) > 4:
+#                 # Truncate to 4 words if needed
+#                 playlist_name = " ".join(words[:4])
+#             else:
+#                 playlist_name = raw_text
+            
+#             # Remove any quotes or punctuation at the beginning or end
+#             playlist_name = playlist_name.strip('"\'.,!?:;()[]{}')
+            
+#             # Return just the name as plain text in JSON format
+#             return _corsify_actual_response(jsonify(playlist_name))
+
+#     except Exception as e:
+#         return _corsify_actual_response(jsonify({"error": str(e)})), 500
+
 # def _build_cors_preflight_response():
 #     response = make_response()
 #     response.headers.add("Access-Control-Allow-Origin", "*")
@@ -196,14 +253,12 @@
 #     app.run(debug=True, port=5000)
 
 
-
-
-
 from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import json
 import re
 import ast
+import random
 from mistralai import Mistral
 
 app = Flask(__name__)
@@ -264,38 +319,27 @@ User mood: {user_mood}
 """
 
     try:
-        # Initialize Mistral client
         with Mistral(api_key="AYVGzIu6L5X6bxHVGbjBmprpr3IzqLmV") as mistral_client:
-            # Call Mistral AI API
             response = mistral_client.chat.complete(
-                model="mistral-medium-latest",  # Using medium model for better knowledge of real songs
+                model="mistral-medium-latest",
                 messages=[
                     {
                         "content": master_prompt,
                         "role": "user",
                     },
                 ],
-                temperature=0.8,  # Balanced temperature for factual responses with variety
-                max_tokens=2048,  # Ensure enough tokens for a complete response
-                top_p=0.9         # Slightly constrained sampling for higher quality
+                temperature=0.8,
+                max_tokens=2048,
+                top_p=0.9
             )
 
-            # Get the response content
             raw_text = response.choices[0].message.content.strip()
 
-            # Extract JSON from the response
-            # First, look for JSON between code blocks
-            import re
             json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', raw_text)
-            
             if json_match:
-                # If JSON is wrapped in code blocks, extract it
                 json_str = json_match.group(1).strip()
             else:
-                # Otherwise use the whole text and try to find JSON
                 json_str = raw_text
-                
-                # Try to find array or object in the text
                 array_match = re.search(r'\[\s*\{.*\}\s*\]', json_str, re.DOTALL)
                 if array_match:
                     json_str = array_match.group(0)
@@ -304,43 +348,32 @@ User mood: {user_mood}
                     if object_match:
                         json_str = object_match.group(0)
 
-            # Try parsing with json
             try:
                 playlist_json = json.loads(json_str)
-                
-                # Additional validation to check for duplicates
                 if isinstance(playlist_json, list):
-                    # Check for duplicate songs
                     seen_songs = set()
                     unique_playlist = []
-                    
+
                     for song in playlist_json:
-                        # Create a unique identifier for each song
                         song_id = f"{song.get('title', '').lower()}|{song.get('artist', '').lower()}"
-                        
                         if song_id not in seen_songs:
                             seen_songs.add(song_id)
                             unique_playlist.append(song)
-                    
-                    # If we've removed duplicates but still have fewer than 10 songs,
-                    # we'll try with a different model or higher temperature if unique_playlist is too small
+
                     if len(unique_playlist) < 5 and len(unique_playlist) < len(playlist_json):
-                        # Try again with the medium model and higher temperature
                         retry_response = mistral_client.chat.complete(
-                            model="mistral-medium-latest",  # Upgrade to a more capable model
+                            model="mistral-medium-latest",
                             messages=[
                                 {
                                     "content": master_prompt + "\n\nIMPORTANT: Ensure ALL 10 songs are DIFFERENT. Do not repeat any songs!",
                                     "role": "user",
                                 },
                             ],
-                            temperature=0.9,  # Higher temperature for more variety
+                            temperature=0.9,
                             max_tokens=2048
                         )
-                        
+
                         retry_text = retry_response.choices[0].message.content.strip()
-                        
-                        # Process the retry response
                         json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', retry_text)
                         if json_match:
                             retry_json_str = json_match.group(1).strip()
@@ -349,27 +382,23 @@ User mood: {user_mood}
                             array_match = re.search(r'\[\s*\{.*\}\s*\]', retry_json_str, re.DOTALL)
                             if array_match:
                                 retry_json_str = array_match.group(0)
-                        
+
                         try:
                             retry_playlist = json.loads(retry_json_str)
                             if isinstance(retry_playlist, list):
-                                # Check for duplicates again
                                 for song in retry_playlist:
                                     song_id = f"{song.get('title', '').lower()}|{song.get('artist', '').lower()}"
                                     if song_id not in seen_songs:
                                         seen_songs.add(song_id)
                                         unique_playlist.append(song)
                         except:
-                            # If retry fails, we'll continue with what we have
                             pass
-                    
-                    # Always return the raw playlist without any wrapper or warnings
+
                     return _corsify_actual_response(jsonify(unique_playlist))
-                
+
                 return _corsify_actual_response(jsonify(playlist_json))
-                
+
             except json.JSONDecodeError:
-                # Fallback: try literal_eval for semi-valid Python lists
                 try:
                     playlist_json = ast.literal_eval(json_str)
                     return _corsify_actual_response(jsonify(playlist_json))
@@ -382,62 +411,20 @@ User mood: {user_mood}
     except Exception as e:
         return _corsify_actual_response(jsonify({"error": str(e)})), 500
 
-@app.route("/api/generate-name", methods=["POST", "OPTIONS"])
-def generate_playlist_name():
-    if request.method == "OPTIONS":
-        return _build_cors_preflight_response()
+@app.route("/songs", methods=["GET"])
+def get_random_songs():
+    songs = []
+    for i in range(1, 101):  # Create 100 sample songs
+        songs.append({
+            "title": f"Song {i}",
+            "artist": f"Artist {((i - 1) % 20) + 1}",
+            "album": f"Album {((i - 1) % 15) + 1}",
+            "duration": f"{random.randint(2, 5)}:{random.randint(0, 59):02}",
+            "days": f"{random.randint(1, 10)} days ago"
+        })
 
-    data = request.get_json()
-    user_prompt = data.get("prompt", "")
-
-    name_prompt = f"""
-Generate a catchy, memorable playlist name based on this user input: "{user_prompt}"
-
-REQUIREMENTS:
-1. The name must be AT MOST 4 words (fewer words is better)
-2. The name should capture the essence or mood of the user's prompt
-3. Be creative, evocative, and original
-4. Don't use generic phrases like "Music for..." or "Songs for..."
-
-Return ONLY the playlist name as plain text with no quotes, explanations, or additional formatting.
-"""
-
-    try:
-        # Initialize Mistral client
-        with Mistral(api_key="AYVGzIu6L5X6bxHVGbjBmprpr3IzqLmV") as mistral_client:
-            # Call Mistral AI API
-            response = mistral_client.chat.complete(
-                model="mistral-small-latest",  # Small model is sufficient for naming
-                messages=[
-                    {
-                        "content": name_prompt,
-                        "role": "user",
-                    },
-                ],
-                temperature=0.9,  # Higher temperature for creativity
-                max_tokens=20,    # Short response
-                top_p=0.95        # Allow for creative sampling
-            )
-
-            # Get the response content
-            raw_text = response.choices[0].message.content.strip()
-            
-            # Process the response to ensure it's at most 4 words
-            words = raw_text.split()
-            if len(words) > 4:
-                # Truncate to 4 words if needed
-                playlist_name = " ".join(words[:4])
-            else:
-                playlist_name = raw_text
-            
-            # Remove any quotes or punctuation at the beginning or end
-            playlist_name = playlist_name.strip('"\'.,!?:;()[]{}')
-            
-            # Return just the name as plain text in JSON format
-            return _corsify_actual_response(jsonify(playlist_name))
-
-    except Exception as e:
-        return _corsify_actual_response(jsonify({"error": str(e)})), 500
+    random.shuffle(songs)
+    return jsonify(songs[:50])  # Return 50 random songs
 
 def _build_cors_preflight_response():
     response = make_response()
